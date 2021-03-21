@@ -1,4 +1,5 @@
 import json
+import os
 import zipfile
 from pprint import pprint
 
@@ -7,7 +8,7 @@ import requests
 
 def get_task(variant: int):
     cookies = {
-        'JSESSIONID': 'pN6_CGtbS1GB9OsVpV8UrT_D8rdm77S97X23vKgR.helios',
+        'JSESSIONID': 'tAok66w_ZTZBh-_K7OQL715_fNKTwUIJmDNOeJSt.helios',
     }
     
     headers = {
@@ -32,7 +33,7 @@ def get_task(variant: int):
         ('p_p_state', 'normal'),
         ('p_p_mode', 'view'),
         ('_selab2_WAR_seportlet_javax.portlet.action', 'getBranches'),
-        ('p_auth', 'SRvBCWwB'),
+        ('p_auth', 'qCvHkE9p'),
     )
     
     data = {
@@ -49,7 +50,7 @@ def get_task(variant: int):
 
 def get_commit(variant: int, commit: int):
     cookies = {
-        'JSESSIONID': 'pN6_CGtbS1GB9OsVpV8UrT_D8rdm77S97X23vKgR.helios',
+        'JSESSIONID': 'tAok66w_ZTZBh-_K7OQL715_fNKTwUIJmDNOeJSt.helios',
     }
     
     headers = {
@@ -85,18 +86,19 @@ def get_commit(variant: int, commit: int):
     
     response = requests.post('https://se.ifmo.ru/courses/software-engineering-basics', headers=headers, params=params, cookies=cookies, data=data)
     
-    directory_to_extract_to = f'res/{variant}/commit{commit}'
-    path_to_zip_file = f'{directory_to_extract_to}.zip'
+    os.makedirs(f'res/{variant}', exist_ok=True)
+    os.makedirs(f'res/{variant}/zips', exist_ok=True)
+    os.makedirs(f'res/{variant}/commits', exist_ok=True)
     
-    with open(path_to_zip_file, 'wb+') as zip_file:
+    with open(f'res/{variant}/zips/commit{commit}.zip', 'wb+') as zip_file:
         zip_file.write(response.content)
     
-    with zipfile.ZipFile(path_to_zip_file, 'r') as zip_reference:
-        zip_reference.extractall(directory_to_extract_to)
+    with zipfile.ZipFile(f'res/{variant}/zips/commit{commit}.zip', 'r') as zip_reference:
+        zip_reference.extractall(f'res/{variant}/commits/commit{commit}/')
 
 
 def main() -> None:
-    variant = 273826
+    variant = 21643
     
     data = get_task(variant=variant)
     pprint(data)
