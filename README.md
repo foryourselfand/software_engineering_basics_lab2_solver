@@ -40,7 +40,7 @@ python solver.py --p_auth Supxz0z7 --jsessionid oeEJpf_6urlKNLWMTXjXQJjQUPTiWTCG
 ```
 
 ## Results
-Directory res/{variant}/ contains solution_git.sh, solution_svn.sh and directories commits/ and zips/ 
+Directory `res/{variant}/` contains `solution_git.sh`, `solution_svn.sh` and directories `commits/` and `zips/` 
 
 ## JSESSIONID? p_auth?
 * go to https://se.ifmo.ru/courses/software-engineering-basics
