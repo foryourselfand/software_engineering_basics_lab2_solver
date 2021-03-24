@@ -39,8 +39,10 @@ python solver.py --p_auth Supxz0z7 --jsessionid oeEJpf_6urlKNLWMTXjXQJjQUPTiWTCG
 # don't change jsessionid and p_auth every time, only if needed (stopped working, so needs update)  
 ```
 
-## JSESSIONID? p_auth?
+## Results
+Directory res/{variant}/ contains solution_git.sh, solution_svn.sh and directories commits/ and zips/ 
 
+## JSESSIONID? p_auth?
 * go to https://se.ifmo.ru/courses/software-engineering-basics
 * open network window in browser
 * type variant and press enter
