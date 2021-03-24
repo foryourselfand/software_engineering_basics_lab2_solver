@@ -1,7 +1,11 @@
-import json
 import os
+import re
 import zipfile
+from argparse import ArgumentParser
+from argparse import Namespace
 from dataclasses import dataclass
+from json import JSONDecodeError
+from json import loads
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -9,104 +13,6 @@ from typing import Set
 from typing import Union
 
 import requests
-
-
-def get_task(variant: int) -> Dict[str, Dict[str, Union[int, str, List[int], Dict[str, Union[int, str]]]]]:
-    cookies = {
-        'JSESSIONID': 'MhewXg2IYCWvJ6ZsX8xYGuBlfHMzb02LFpQmDdBm.helios',
-    }
-    
-    headers = {
-        'Connection': 'keep-alive',
-        'sec-ch-ua': '"Google Chrome";v="89", "Chromium";v="89", ";Not A Brand";v="99"',
-        'Accept': '*/*',
-        'X-Requested-With': 'XMLHttpRequest',
-        'sec-ch-ua-mobile': '?0',
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'Origin': 'https://se.ifmo.ru',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Dest': 'empty',
-        'Referer': 'https://se.ifmo.ru/courses/software-engineering-basics',
-        'Accept-Language': 'ru',
-    }
-    
-    params = {
-        'p_p_id': 'selab2_WAR_seportlet',
-        'p_p_lifecycle': '1',
-        'p_p_state': 'normal',
-        'p_p_mode': 'view',
-        '_selab2_WAR_seportlet_javax.portlet.action': 'getBranches',
-        'p_auth': 'pzEAP8Ei',
-    }
-    
-    data = {
-        'variant': variant
-    }
-    
-    response = requests.post('https://se.ifmo.ru/courses/software-engineering-basics', headers=headers, params=params, cookies=cookies, data=data)
-    
-    json_raw: str = response.text
-    for br_index in range(3):
-        json_raw = json_raw.replace(f'br_{br_index} ', f'"br_{br_index}" ')
-    return json.loads(json_raw)
-
-
-def extract_commit(variant: int, commit: int) -> None:
-    cookies = {
-        'JSESSIONID': 'MhewXg2IYCWvJ6ZsX8xYGuBlfHMzb02LFpQmDdBm.helios',
-    }
-    
-    headers = {
-        'Connection': 'keep-alive',
-        'Cache-Control': 'max-age=0',
-        'sec-ch-ua': '"Google Chrome";v="89", "Chromium";v="89", ";Not A Brand";v="99"',
-        'sec-ch-ua-mobile': '?0',
-        'Upgrade-Insecure-Requests': '1',
-        'Origin': 'https://se.ifmo.ru',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 11_2_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-User': '?1',
-        'Sec-Fetch-Dest': 'document',
-        'Referer': 'https://se.ifmo.ru/courses/software-engineering-basics',
-        'Accept-Language': 'ru,en-US;q=0.9,en;q=0.8',
-    }
-    
-    params = {
-        'p_p_id': 'selab2_WAR_seportlet',
-        'p_p_lifecycle': '2',
-        'p_p_state': 'normal',
-        'p_p_mode': 'view',
-        'p_p_cacheability': 'cacheLevelPage',
-    }
-    
-    data = {
-        'variant': variant,
-        'commit': commit
-    }
-    
-    response = requests.post('https://se.ifmo.ru/courses/software-engineering-basics', headers=headers, params=params, cookies=cookies, data=data)
-    
-    dir_base = f'res/{variant}'
-    dir_zips = f'{dir_base}/zips'
-    dir_commits = f'{dir_base}/commits'
-    name_commit = f'commit{commit}'
-    filename_zip = f'{dir_zips}/{name_commit}.zip'
-    dir_commit_extracted = f'{dir_commits}/{name_commit}/'
-    
-    os.makedirs(dir_base, exist_ok=True)
-    os.makedirs(dir_zips, exist_ok=True)
-    os.makedirs(dir_commits, exist_ok=True)
-    
-    with open(f'{filename_zip}', 'wb+') as zip_file:
-        zip_file.write(response.content)
-    
-    with zipfile.ZipFile(f'{filename_zip}', 'r') as zip_reference:
-        zip_reference.extractall(f'{dir_commit_extracted}')
 
 
 @dataclass
@@ -117,8 +23,118 @@ class Commit:
     branch_to_merge: Optional[str] = None
 
 
-def get_solution_git(commits: Dict[int, Commit]) -> List[str]:
-    solution: List[str] = [
+Task = Dict[str, Dict[str, Union[int, str, List[int], Dict[str, Union[int, str]]]]]
+Commits = Dict[int, Commit]
+Solution = List[str]
+
+
+def get_args() -> Namespace:
+    parser = ArgumentParser()
+    required = parser.add_argument_group('required named arguments')
+    required.add_argument('-v', '--variant', required=True, help='variant number', type=int)
+    required.add_argument('-j', '--jsessionid', required=True, help='JSESSIONID from cookies', type=str)
+    required.add_argument('-p', '--p_auth', required=True, help='p_auth from params', type=str)
+    required.add_argument('-e', '--extract_commits', help='should solver also extract commits', action='store_true')
+    return parser.parse_args()
+
+
+def get_task(args: Namespace) -> Task:
+    params = {
+        'p_p_id': 'selab2_WAR_seportlet',
+        'p_p_lifecycle': '1',
+        'p_p_state': 'normal',
+        'p_p_mode': 'view',
+        '_selab2_WAR_seportlet_javax.portlet.action': 'getBranches',
+        'p_auth': args.p_auth,
+    }
+    
+    data = {
+        'variant': args.variant
+    }
+    
+    cookies = {
+        'JSESSIONID': args.jsessionid,
+    }
+    
+    response = requests.post('https://se.ifmo.ru/courses/software-engineering-basics', params=params, data=data, cookies=cookies)
+    
+    json_raw: str = response.text
+    json_correct = re.sub(r'br_(\d+) ', r'"br_\1" ', json_raw)
+    try:
+        return loads(json_correct)
+    except JSONDecodeError:
+        exit('check JSESSIONID from cookies and p_auth from params')
+
+
+def extract_commit(args: Namespace, commit_index: int) -> None:
+    params = {
+        'p_p_id': 'selab2_WAR_seportlet',
+        'p_p_lifecycle': '2',
+        'p_p_state': 'normal',
+        'p_p_mode': 'view',
+        'p_p_cacheability': 'cacheLevelPage',
+    }
+    
+    data = {
+        'variant': args.variant,
+        'commit': commit_index
+    }
+    
+    cookies = {
+        'JSESSIONID': args.jsessionid,
+    }
+    
+    response = requests.post('https://se.ifmo.ru/courses/software-engineering-basics', params=params, data=data, cookies=cookies)
+    
+    dir_base = f'res/{args.variant}'
+    dir_zips = f'{dir_base}/zips'
+    dir_commits = f'{dir_base}/commits'
+    name_commit = f'commit{commit_index}'
+    filename_zip = f'{dir_zips}/{name_commit}.zip'
+    dir_commit_extracted = f'{dir_commits}/{name_commit}/'
+    
+    os.makedirs(dir_zips, exist_ok=True)
+    os.makedirs(dir_commits, exist_ok=True)
+    
+    with open(f'{filename_zip}', 'wb+') as zip_file:
+        zip_file.write(response.content)
+    
+    with zipfile.ZipFile(f'{filename_zip}', 'r') as zip_reference:
+        zip_reference.extractall(f'{dir_commit_extracted}')
+
+
+def get_commits(task: Task) -> Commits:
+    commits: Commits = {}
+    
+    for branch, values in task.items():
+        user_int = values['user']
+        user_str = 'red' if user_int == 0 else 'blue'
+        for commit_index in values['commits']:
+            commit_current = Commit(index=commit_index, branch=branch, user=user_str)
+            commits[commit_index] = commit_current
+    
+    for branch_to_merge, values in task.items():
+        merge_value: Dict[str, Union[int, str]] = values.get('merge', None)
+        if merge_value is None:
+            continue
+        commit_to_merge: int = merge_value['commit']
+        commits[commit_to_merge].branch_to_merge = branch_to_merge
+    return commits
+
+
+def extract_commits_if_need(args: Namespace, task: Task) -> None:
+    if not args.extract_commits:
+        return
+    commit_index_max = 0
+    for branch_value in task.values():
+        commit_index_max = max(commit_index_max, max(branch_value['commits']))
+    
+    for commit_index in range(commit_index_max + 1):
+        extract_commit(args=args, commit_index=commit_index)
+
+
+def get_solution_git(commits: Commits) -> Solution:
+    solution: Solution = [
         '#!/bin/bash',
         '',
         '#init',
@@ -164,8 +180,8 @@ def get_solution_git(commits: Dict[int, Commit]) -> List[str]:
     return solution
 
 
-def get_solution_svn(commits: Dict[int, Commit]) -> List[str]:
-    solution: List[str] = [
+def get_solution_svn(commits: Commits) -> Solution:
+    solution: Solution = [
         '#!/bin/bash',
         '',
         '#init',
@@ -186,7 +202,7 @@ def get_solution_svn(commits: Dict[int, Commit]) -> List[str]:
         '',
     ]
     
-    branch_current = ''
+    branch_current: str = ''
     branches_visited: Set[str] = set()
     for commit_index in range(len(commits.values())):
         solution.append(f'#r{commit_index}')
@@ -217,37 +233,26 @@ def get_solution_svn(commits: Dict[int, Commit]) -> List[str]:
     return solution
 
 
+def write_solution(args: Namespace, solution_name: str, solution: Solution):
+    with open(f'res/{args.variant}/{solution_name}', 'w+') as file_solution_git:
+        file_solution_git.writelines(line + '\n' for line in solution)
+
+
 def main() -> None:
-    variant: int = 283500
+    args: Namespace = get_args()
     
-    data: Dict[str, Dict[str, Union[int, str, List[int], Dict[str, Union[int, str]]]]] = get_task(variant=variant)
+    os.makedirs(f'res/{args.variant}', exist_ok=True)
     
-    for commit in range(15):
-        extract_commit(variant=variant, commit=commit)
+    task: Task = get_task(args=args)
+    extract_commits_if_need(args=args, task=task)
     
-    commits: Dict[int, Commit] = {}
+    commits: Commits = get_commits(task=task)
     
-    for branch, values in data.items():
-        user_int = values['user']
-        user_str = 'red' if user_int == 0 else 'blue'
-        for commit_index in values['commits']:
-            commit_current = Commit(index=commit_index, branch=branch, user=user_str)
-            commits[commit_index] = commit_current
+    solution_git: Solution = get_solution_git(commits=commits)
+    write_solution(args=args, solution_name='solution_git.sh', solution=solution_git)
     
-    for branch_to_merge, values in data.items():
-        merge_value: Dict[str, Union[int, str]] = values.get('merge', None)
-        if merge_value is None:
-            continue
-        commit_to_merge: int = merge_value['commit']
-        commits[commit_to_merge].branch_to_merge = branch_to_merge
-    
-    solution_git: List[str] = get_solution_git(commits)
-    with open(f'res/{variant}/solution_git.sh', 'w+') as file_solution_git:
-        file_solution_git.writelines(line + '\n' for line in solution_git)
-    
-    solution_svn: List[str] = get_solution_svn(commits)
-    with open(f'res/{variant}/solution_svn.sh', 'w+') as file_solution_svn:
-        file_solution_svn.writelines(line + '\n' for line in solution_svn)
+    solution_svn: Solution = get_solution_svn(commits=commits)
+    write_solution(args=args, solution_name='solution_svn.sh', solution=solution_svn)
 
 
 if __name__ == '__main__':
