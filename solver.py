@@ -4,6 +4,7 @@ import zipfile
 from argparse import ArgumentParser
 from argparse import Namespace
 from dataclasses import dataclass
+from filecmp import dircmp
 from json import JSONDecodeError
 from json import loads
 from typing import Dict
@@ -13,6 +14,7 @@ from typing import Set
 from typing import Union
 
 import requests
+from icecream import ic
 
 
 @dataclass
@@ -121,16 +123,19 @@ def get_commits(task: Task) -> Commits:
     return commits
 
 
-def extract_commits(args: Namespace, task: Task) -> None:
-    commit_index_max = 0
+def get_commit_index_max(task: Task) -> int:
+    commit_index_max: int = 0
     for branch_value in task.values():
         commit_index_max = max(commit_index_max, max(branch_value['commits']))
-    
+    return commit_index_max
+
+
+def extract_commits(args: Namespace, commit_index_max: int) -> None:
     for commit_index in range(commit_index_max + 1):
         extract_commit(args=args, commit_index=commit_index)
 
 
-def get_solution_git(commits: Commits) -> Solution:
+def get_solution_git(commits: Commits, dir_base: str) -> Solution:
     solution: Solution = [
         '#!/bin/bash',
         '',
@@ -145,6 +150,8 @@ def get_solution_git(commits: Commits) -> Solution:
     user_current: str = ''
     branch_current: str = ''
     branches_visited: Set[str] = set()
+    dir_previous: str = ''
+    branch_to_last_dir: Dict[str, str] = {}
     for commit_index in range(len(commits.values())):
         solution.append(f'#r{commit_index}')
         commit_current: Commit = commits[commit_index]
@@ -165,19 +172,40 @@ def get_solution_git(commits: Commits) -> Solution:
         if commit_current.branch_to_merge is not None:
             solution.append(f'git merge {commit_current.branch_to_merge} --no-commit')
         
+        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
+        branch_to_last_dir[branch_current] = dir_current
+        allow_empty: str = ''
+        copy_right_only: List[str] = []
+        if dir_previous != '':
+            copy_dir_cmp = dircmp(dir_previous, dir_current)
+            copy_right_only: List[str] = copy_dir_cmp.right_only
+            copy_diff_files: List[str] = copy_dir_cmp.diff_files
+            if not copy_right_only and not copy_diff_files:
+                allow_empty = '--allow-empty '
         solution.append('ls | grep -v .git | xargs rm -rf')
         solution.append(f'cp -r ../commits/commit{commit_index}/* .')
         
         if commit_current.branch_to_merge is not None:
-            solution.append('git checkout --ours -- ./*')
+            merge_dir_cmp = dircmp(dir_previous, dir_current)
+            merge_right_only: List[str] = merge_dir_cmp.right_only
+            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            if merge_right_only or merge_diff_files:
+                solution.append('git checkout --ours -- ./*')
         
-        solution.append('git add .')
-        solution.append(f'git commit --allow-empty -m "r{commit_index}"')
+        if dir_previous == '':
+            solution.append('git add .')
+        elif copy_right_only:
+            copy_right_only_quoted: List[str] = [f'"{element}"' for element in copy_right_only]
+            files_to_add = ' '.join(copy_right_only_quoted)
+            solution.append(f'git add {files_to_add}')
+        solution.append(f'git commit {allow_empty}-m "r{commit_index}"')
         solution.append('')
+        
+        dir_previous = dir_current
     return solution
 
 
-def get_solution_svn(commits: Commits) -> Solution:
+def get_solution_svn(commits: Commits, dir_base: str) -> Solution:
     solution: Solution = [
         '#!/bin/bash',
         '',
@@ -201,6 +229,8 @@ def get_solution_svn(commits: Commits) -> Solution:
     
     branch_current: str = ''
     branches_visited: Set[str] = set()
+    dir_previous: str = ''
+    branch_to_last_dir: Dict[str, str] = {}
     for commit_index in range(len(commits.values())):
         solution.append(f'#r{commit_index}')
         commit_current: Commit = commits[commit_index]
@@ -217,15 +247,41 @@ def get_solution_svn(commits: Commits) -> Solution:
         if commit_current.branch_to_merge is not None:
             solution.append(f'svn merge $REMOTE_URL/branches/{commit_current.branch_to_merge}')
         
-        solution.append('svn rm ./* --force')
+        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
+        branch_to_last_dir[branch_current] = dir_current
+        copy_right_only: List[str] = []
+        empty_commit: bool = False
+        if dir_previous != '':
+            copy_dir_cmp = dircmp(dir_previous, dir_current)
+            copy_right_only: List[str] = copy_dir_cmp.right_only
+            copy_diff_files: List[str] = copy_dir_cmp.diff_files
+            if not copy_right_only and not copy_diff_files:
+                empty_commit = True
+        
+        solution.append('svn rm --force ./*')
         solution.append(f'cp -r $COMMITS/commit{commit_index}/* .')
-        solution.append(f'echo "r{commit_index}" > temporary_file')
         
         if commit_current.branch_to_merge is not None:
-            solution.append('svn resolve . -R --accept mine-full')
-        solution.append('svn add ./* --force')
+            merge_dir_cmp = dircmp(dir_previous, dir_current)
+            merge_right_only: List[str] = merge_dir_cmp.right_only
+            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            if merge_right_only or merge_diff_files:
+                solution.append('svn resolve . -R --accept mine-full')
+        
+        if dir_previous == '':
+            solution.append('svn add --force ./*')
+        elif copy_right_only:
+            copy_right_only_quoted: List[str] = [f'"{element}"' for element in copy_right_only]
+            files_to_add = ' '.join(copy_right_only_quoted)
+            solution.append(f'svn add --force {files_to_add}')
+        elif empty_commit:
+            solution.append(f'echo "r{commit_index}" > temporary_file')
+            solution.append(f'svn add "temporary_file"')
+            
         solution.append(f'svn commit -m "commit{commit_index}" --username "{commit_current.user}"')
         solution.append('')
+        
+        dir_previous = dir_current
     
     return solution
 
@@ -238,17 +294,26 @@ def write_solution(args: Namespace, solution_name: str, solution: Solution):
 def main() -> None:
     args: Namespace = get_args()
     
-    os.makedirs(f'res/{args.variant}', exist_ok=True)
+    dir_base: str = f'res/{args.variant}'
+    os.makedirs(dir_base, exist_ok=True)
     
     task: Task = get_task(args=args)
-    extract_commits(args=args, task=task)
+    commit_index_max: int = get_commit_index_max(task=task)
+    extract_commits(args=args, commit_index_max=commit_index_max)
     
     commits: Commits = get_commits(task=task)
     
-    solution_git: Solution = get_solution_git(commits=commits)
+    # for commit_index_current in range(1, commit_index_max + 1):
+    #     commit_index_previous: int = commit_index_current - 1
+    #     dir_previous: str = f'{dir_base}/commits/commit{commit_index_previous}'
+    #     dir_current: str = f'{dir_base}/commits/commit{commit_index_current}'
+    #     diff_files: List[str] = dircmp(dir_previous, dir_current).diff_files
+    #     ic(diff_files)
+    
+    solution_git: Solution = get_solution_git(commits=commits, dir_base=dir_base)
     write_solution(args=args, solution_name='solution_git.sh', solution=solution_git)
     
-    solution_svn: Solution = get_solution_svn(commits=commits)
+    solution_svn: Solution = get_solution_svn(commits=commits, dir_base=dir_base)
     write_solution(args=args, solution_name='solution_svn.sh', solution=solution_svn)
 
 
