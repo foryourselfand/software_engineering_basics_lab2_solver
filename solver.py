@@ -141,9 +141,9 @@ def get_solution_git(commits: Commits, dir_base: str) -> Solution:
         '',
         '#init',
         'cd ~/opi2',
-        'rm -rf gitRepo',
-        'mkdir gitRepo',
-        'cd gitRepo',
+        'rm -rf repo_git',
+        'mkdir repo_git',
+        'cd repo_git',
         'git init',
         ''
     ]
@@ -169,13 +169,18 @@ def get_solution_git(commits: Commits, dir_base: str) -> Solution:
             else:
                 solution.append(f'git checkout {branch_current}')
         
+        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
         if commit_current.branch_to_merge is not None:
             solution.append(f'git merge {commit_current.branch_to_merge} --no-commit')
+            merge_dir_cmp = dircmp(dir_previous, dir_current)
+            merge_right_only: List[str] = merge_dir_cmp.right_only
+            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            if merge_right_only or merge_diff_files:
+                solution.append('git checkout --ours .')
         
-        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
         branch_to_last_dir[branch_current] = dir_current
         allow_empty: str = ''
-        copy_right_only: List[str] = []
+        
         if dir_previous != '':
             copy_dir_cmp = dircmp(dir_previous, dir_current)
             copy_right_only: List[str] = copy_dir_cmp.right_only
@@ -184,20 +189,7 @@ def get_solution_git(commits: Commits, dir_base: str) -> Solution:
                 allow_empty = '--allow-empty '
         solution.append('ls | grep -v .git | xargs rm -rf')
         solution.append(f'cp -r ../commits/commit{commit_index}/* .')
-        
-        if commit_current.branch_to_merge is not None:
-            merge_dir_cmp = dircmp(dir_previous, dir_current)
-            merge_right_only: List[str] = merge_dir_cmp.right_only
-            merge_diff_files: List[str] = merge_dir_cmp.diff_files
-            if merge_right_only or merge_diff_files:
-                solution.append('git checkout --ours -- ./*')
-        
-        if dir_previous == '':
-            solution.append('git add .')
-        elif copy_right_only:
-            copy_right_only_quoted: List[str] = [f'"{element}"' for element in copy_right_only]
-            files_to_add = ' '.join(copy_right_only_quoted)
-            solution.append(f'git add {files_to_add}')
+        solution.append('git add .')
         solution.append(f'git commit {allow_empty}-m "r{commit_index}"')
         solution.append('')
         
@@ -211,15 +203,15 @@ def get_solution_svn(commits: Commits, dir_base: str) -> Solution:
         '',
         '#init',
         'cd ~/opi2',
-        'rm -rf svnRepo',
-        'mkdir svnRepo',
-        'cd svnRepo',
+        'rm -rf repo_svn',
+        'mkdir repo_svn',
+        'cd repo_svn',
         '',
         '#init remote',
         'svnadmin create origin',
         'REMOTE_URL="file://$(pwd -P)/origin"',
         'COMMITS=~/opi2/commits',
-        'svn mkdir -m "project structure" $REMOTE_URL/trunk $REMOTE_URL/branches',
+        'svn mkdir -m "project structure" $REMOTE_URL/trunk $REMOTE_URL/branches --username "red"',
         '',
         '#init local',
         'svn checkout $REMOTE_URL/trunk working_copy',
@@ -236,20 +228,30 @@ def get_solution_svn(commits: Commits, dir_base: str) -> Solution:
         commit_current: Commit = commits[commit_index]
         
         if branch_current != commit_current.branch:
+            branch_previous: str = branch_current
             branch_current = commit_current.branch
             if branch_current not in branches_visited and branch_current != 'br_0':
                 branches_visited.add(branch_current)
-                solution.append(f'svn copy $REMOTE_URL/trunk $REMOTE_URL/branches/{branch_current} -m "Add {branch_current}" --username "{commit_current.user}"')
+                branch_from: str = 'trunk' if branch_previous == 'br_0' else f'branches/{branch_previous}'
+                solution.append(f'svn copy $REMOTE_URL/{branch_from} $REMOTE_URL/branches/{branch_current} -m "Add {branch_current}" --username "{commit_current.user}"')
             
-            branch_temp = 'trunk' if commit_current.branch == 'br_0' else commit_current.branch
-            solution.append(f'svn switch $REMOTE_URL/{branch_temp}')
+            if commit_index != 0:
+                if commit_current.branch == 'br_0':
+                    solution.append(f'svn switch $REMOTE_URL/trunk')
+                else:
+                    solution.append(f'svn switch $REMOTE_URL/branches/{commit_current.branch}')
+        
+        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
         
         if commit_current.branch_to_merge is not None:
             solution.append(f'svn merge $REMOTE_URL/branches/{commit_current.branch_to_merge}')
+            merge_dir_cmp = dircmp(dir_previous, dir_current)
+            merge_right_only: List[str] = merge_dir_cmp.right_only
+            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            if merge_right_only or merge_diff_files:
+                solution.append('svn resolve . -R --accept=working')
         
-        dir_current: str = f'{dir_base}/commits/commit{commit_index}'
         branch_to_last_dir[branch_current] = dir_current
-        copy_right_only: List[str] = []
         empty_commit: bool = False
         if dir_previous != '':
             copy_dir_cmp = dircmp(dir_previous, dir_current)
@@ -257,27 +259,14 @@ def get_solution_svn(commits: Commits, dir_base: str) -> Solution:
             copy_diff_files: List[str] = copy_dir_cmp.diff_files
             if not copy_right_only and not copy_diff_files:
                 empty_commit = True
-        
-        solution.append('svn rm --force ./*')
+        if commit_index != 0:
+            solution.append('svn rm --force *')
         solution.append(f'cp -r $COMMITS/commit{commit_index}/* .')
         
-        if commit_current.branch_to_merge is not None:
-            merge_dir_cmp = dircmp(dir_previous, dir_current)
-            merge_right_only: List[str] = merge_dir_cmp.right_only
-            merge_diff_files: List[str] = merge_dir_cmp.diff_files
-            if merge_right_only or merge_diff_files:
-                solution.append('svn resolve . -R --accept mine-full')
-        
-        if dir_previous == '':
-            solution.append('svn add --force ./*')
-        elif copy_right_only:
-            copy_right_only_quoted: List[str] = [f'"{element}"' for element in copy_right_only]
-            files_to_add = ' '.join(copy_right_only_quoted)
-            solution.append(f'svn add --force {files_to_add}')
-        elif empty_commit:
+        if empty_commit:
             solution.append(f'echo "r{commit_index}" > temporary_file')
-            solution.append(f'svn add "temporary_file"')
-            
+        solution.append('svn add --force *')
+        
         solution.append(f'svn commit -m "commit{commit_index}" --username "{commit_current.user}"')
         solution.append('')
         
