@@ -11,6 +11,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Set
+from typing import Tuple
 from typing import Union
 
 import requests
@@ -134,6 +135,13 @@ def extract_commits(args: Namespace, commit_index_max: int) -> None:
         extract_commit(args=args, commit_index=commit_index)
 
 
+def get_right_only_and_diff_files(dir_current: str, dir_previous: str) -> Tuple[List[str], List[str]]:
+    copy_dir_cmp = dircmp(dir_previous, dir_current)
+    copy_right_only: List[str] = copy_dir_cmp.right_only
+    copy_diff_files: List[str] = copy_dir_cmp.diff_files
+    return copy_right_only, copy_diff_files
+
+
 def get_solution_git(commits: Commits, dir_base: str) -> Solution:
     solution: Solution = [
         '#!/bin/bash',
@@ -171,9 +179,7 @@ def get_solution_git(commits: Commits, dir_base: str) -> Solution:
         dir_current: str = f'{dir_base}/commits/commit{commit_index}'
         if commit_current.branch_to_merge is not None:
             solution.append(f'git merge {commit_current.branch_to_merge} --no-commit')
-            merge_dir_cmp = dircmp(dir_previous, dir_current)
-            merge_right_only: List[str] = merge_dir_cmp.right_only
-            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            merge_right_only, merge_diff_files = get_right_only_and_diff_files(dir_current, branch_to_last_dir[commit_current.branch_to_merge])
             if merge_right_only or merge_diff_files:
                 solution.append('git checkout --ours .')
         
@@ -181,9 +187,7 @@ def get_solution_git(commits: Commits, dir_base: str) -> Solution:
         allow_empty: str = ''
         
         if dir_previous != '':
-            copy_dir_cmp = dircmp(dir_previous, dir_current)
-            copy_right_only: List[str] = copy_dir_cmp.right_only
-            copy_diff_files: List[str] = copy_dir_cmp.diff_files
+            copy_right_only, copy_diff_files = get_right_only_and_diff_files(dir_current, dir_previous)
             if not copy_right_only and not copy_diff_files:
                 allow_empty = '--allow-empty '
         solution.append('ls | grep -v .git | xargs rm -rf')
@@ -244,18 +248,14 @@ def get_solution_svn(commits: Commits, dir_base: str) -> Solution:
         
         if commit_current.branch_to_merge is not None:
             solution.append(f'svn merge $REMOTE_URL/branches/{commit_current.branch_to_merge}')
-            merge_dir_cmp = dircmp(dir_previous, dir_current)
-            merge_right_only: List[str] = merge_dir_cmp.right_only
-            merge_diff_files: List[str] = merge_dir_cmp.diff_files
+            merge_right_only, merge_diff_files = get_right_only_and_diff_files(dir_current, branch_to_last_dir[commit_current.branch_to_merge])
             if merge_right_only or merge_diff_files:
                 solution.append('svn resolve . -R --accept=working')
         
         branch_to_last_dir[branch_current] = dir_current
         empty_commit: bool = False
         if dir_previous != '':
-            copy_dir_cmp = dircmp(dir_previous, dir_current)
-            copy_right_only: List[str] = copy_dir_cmp.right_only
-            copy_diff_files: List[str] = copy_dir_cmp.diff_files
+            copy_right_only, copy_diff_files = get_right_only_and_diff_files(dir_current, dir_previous)
             if not copy_right_only and not copy_diff_files:
                 empty_commit = True
         if commit_index != 0:
@@ -290,13 +290,6 @@ def main() -> None:
     extract_commits(args=args, commit_index_max=commit_index_max)
     
     commits: Commits = get_commits(task=task)
-    
-    # for commit_index_current in range(1, commit_index_max + 1):
-    #     commit_index_previous: int = commit_index_current - 1
-    #     dir_previous: str = f'{dir_base}/commits/commit{commit_index_previous}'
-    #     dir_current: str = f'{dir_base}/commits/commit{commit_index_current}'
-    #     diff_files: List[str] = dircmp(dir_previous, dir_current).diff_files
-    #     ic(diff_files)
     
     solution_git: Solution = get_solution_git(commits=commits, dir_base=dir_base)
     write_solution(args=args, solution_name='solution_git.sh', solution=solution_git)
