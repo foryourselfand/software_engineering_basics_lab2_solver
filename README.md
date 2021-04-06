@@ -27,20 +27,18 @@ python solver.py --help
 #                        JSESSIONID from cookies
 #  -p P_AUTH, --p_auth P_AUTH
 #                        p_auth from params
-#  -e, --extract_commits
-#                        should solver also extract commits
-``` 
+```
 
 ## Examples
 
 ```shell
-python solver.py --variant 134538 --jsessionid YcuD-TUVDbhlPjafeoIjO1RA1xlsgXAtiz_JxgAh.helios --p_auth HkW6wAwA --extract_commits
+python solver.py --variant 134538 --jsessionid YcuD-TUVDbhlPjafeoIjO1RA1xlsgXAtiz_JxgAh.helios --p_auth HkW6wAwA
 python solver.py --p_auth Supxz0z7 --jsessionid oeEJpf_6urlKNLWMTXjXQJjQUPTiWTCGvQ72-kfA.helios --variant 331039
 # don't change jsessionid and p_auth every time, only if needed (stopped working, so needs update)  
 ```
 
 ## Results
-Directory `res/{variant}/` contains `solution_git.sh`, `solution_svn.sh` and directories `commits/` and `zips/` 
+Directory `res/{variant}/` contains `solution_git.sh`, `solution_svn.sh` and directories `commits/` and `zips/`
 
 ## JSESSIONID? p_auth?
 * go to https://se.ifmo.ru/courses/software-engineering-basics

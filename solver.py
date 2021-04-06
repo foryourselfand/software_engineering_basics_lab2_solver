@@ -34,7 +34,6 @@ def get_args() -> Namespace:
     required.add_argument('-v', '--variant', required=True, help='variant number', type=int)
     required.add_argument('-j', '--jsessionid', required=True, help='JSESSIONID from cookies', type=str)
     required.add_argument('-p', '--p_auth', required=True, help='p_auth from params', type=str)
-    required.add_argument('-e', '--extract_commits', help='should solver also extract commits', action='store_true')
     return parser.parse_args()
 
 
@@ -122,9 +121,7 @@ def get_commits(task: Task) -> Commits:
     return commits
 
 
-def extract_commits_if_need(args: Namespace, task: Task) -> None:
-    if not args.extract_commits:
-        return
+def extract_commits(args: Namespace, task: Task) -> None:
     commit_index_max = 0
     for branch_value in task.values():
         commit_index_max = max(commit_index_max, max(branch_value['commits']))
@@ -244,7 +241,7 @@ def main() -> None:
     os.makedirs(f'res/{args.variant}', exist_ok=True)
     
     task: Task = get_task(args=args)
-    extract_commits_if_need(args=args, task=task)
+    extract_commits(args=args, task=task)
     
     commits: Commits = get_commits(task=task)
     
