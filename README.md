@@ -4,16 +4,16 @@
 
 ```shell
 git clone https://github.com/foryourselfand/software_engineering_basics_lab2_solver.git
-virtualenv venv
-source venv/bin/activate
-# venv\Scripts\activate.bat
+python3 -m venv venv_python3 # tested on python3.7, but should work on >= python3.6
+source venv_python3/bin/activate
+# venv_python3\Scripts\activate.bat # Windows
 pip install -r requirements.txt
 ```
 
 ## Usage
 
 ```shell
-python solver.py --help
+python3 solver.py --help
 
 #usage: solver.py [-h] -v VARIANT -j JSESSIONID -p P_AUTH [-e]
 #
@@ -32,15 +32,17 @@ python solver.py --help
 ## Examples
 
 ```shell
-python solver.py --variant 134538 --jsessionid YcuD-TUVDbhlPjafeoIjO1RA1xlsgXAtiz_JxgAh.helios --p_auth HkW6wAwA
-python solver.py --p_auth Supxz0z7 --jsessionid oeEJpf_6urlKNLWMTXjXQJjQUPTiWTCGvQ72-kfA.helios --variant 331039
+python3 solver.py --variant 134538 --jsessionid YcuD-TUVDbhlPjafeoIjO1RA1xlsgXAtiz_JxgAh.helios --p_auth HkW6wAwA
+python3 solver.py --p_auth Supxz0z7 --jsessionid oeEJpf_6urlKNLWMTXjXQJjQUPTiWTCGvQ72-kfA.helios --variant 331039
 # don't change jsessionid and p_auth every time, only if needed (stopped working, so needs update)  
 ```
 
 ## Results
+
 Directory `res/{variant}/` contains `solution_git.sh`, `solution_svn.sh` and directories `commits/` and `zips/`
 
 ## JSESSIONID? p_auth?
+
 * go to https://se.ifmo.ru/courses/software-engineering-basics
 * open network window in browser
 * type variant and press enter
