@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ```shell
 python3 solver.py --help
 
-#usage: solver.py [-h] -v VARIANT -j JSESSIONID -p P_AUTH [-e]
+#usage: solver.py [-h] -v VARIANT -j JSESSIONID -p P_AUTH
 #
 #optional arguments:
 #  -h, --help            show this help message and exit
